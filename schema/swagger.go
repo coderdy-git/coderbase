@@ -101,13 +101,31 @@ func SwaggerSpecGenerator(w http.ResponseWriter, r *http.Request) {
 			"properties": properties,
 		}
 
+		// Parameter header bawaan untuk semua rute API
+		headerParams := []interface{}{
+			map[string]interface{}{
+				"name":        "X-API-Key",
+				"in":          "header",
+				"required":    true,
+				"description": "API Key Proyek (gb_...)",
+				"schema":      map[string]string{"type": "string"},
+			},
+			map[string]interface{}{
+				"name":        "Authorization",
+				"in":          "header",
+				"required":    false,
+				"description": "JWT Token (Format: Bearer <token>) - Diperlukan jika RLS aktif",
+				"schema":      map[string]string{"type": "string"},
+			},
+		}
+
 		// Rute GET / POST untuk tabel ini
 		tablePath := fmt.Sprintf("/api/v1/tables/%s", tableName)
 		paths[tablePath] = map[string]interface{}{
 			"get": map[string]interface{}{
-				"summary":     fmt.Sprintf("Mendapatkan seluruh record dari tabel %s", tableName),
-				"tags":        []string{tableName},
-				"parameters":  []interface{}{},
+				"summary":    fmt.Sprintf("Mendapatkan seluruh record dari tabel %s", tableName),
+				"tags":       []string{tableName},
+				"parameters": headerParams,
 				"responses": map[string]interface{}{
 					"200": map[string]interface{}{
 						"description": "Berhasil mengambil data list",
@@ -125,8 +143,9 @@ func SwaggerSpecGenerator(w http.ResponseWriter, r *http.Request) {
 				},
 			},
 			"post": map[string]interface{}{
-				"summary": fmt.Sprintf("Memasukkan record baru ke tabel %s", tableName),
-				"tags":    []string{tableName},
+				"summary":    fmt.Sprintf("Memasukkan record baru ke tabel %s", tableName),
+				"tags":       []string{tableName},
+				"parameters": headerParams,
 				"requestBody": map[string]interface{}{
 					"required": true,
 					"content": map[string]interface{}{
@@ -154,19 +173,21 @@ func SwaggerSpecGenerator(w http.ResponseWriter, r *http.Request) {
 
 		// Rute PATCH / DELETE untuk tabel ini
 		itemPath := fmt.Sprintf("/api/v1/tables/%s/{id}", tableName)
+		patchParams := append([]interface{}{
+			map[string]interface{}{
+				"name":        "id",
+				"in":          "path",
+				"required":    true,
+				"description": "ID data record",
+				"schema":      map[string]string{"type": "string"},
+			},
+		}, headerParams...)
+
 		paths[itemPath] = map[string]interface{}{
 			"patch": map[string]interface{}{
-				"summary": fmt.Sprintf("Memperbarui record di tabel %s berdasarkan ID", tableName),
-				"tags":    []string{tableName},
-				"parameters": []map[string]interface{}{
-					{
-						"name":        "id",
-						"in":          "path",
-						"required":    true,
-						"description": "ID data record",
-						"schema":      map[string]string{"type": "string"},
-					},
-				},
+				"summary":    fmt.Sprintf("Memperbarui record di tabel %s berdasarkan ID", tableName),
+				"tags":       []string{tableName},
+				"parameters": patchParams,
 				"requestBody": map[string]interface{}{
 					"required": true,
 					"content": map[string]interface{}{
@@ -184,17 +205,9 @@ func SwaggerSpecGenerator(w http.ResponseWriter, r *http.Request) {
 				},
 			},
 			"delete": map[string]interface{}{
-				"summary": fmt.Sprintf("Menghapus record dari tabel %s berdasarkan ID", tableName),
-				"tags":    []string{tableName},
-				"parameters": []map[string]interface{}{
-					{
-						"name":        "id",
-						"in":          "path",
-						"required":    true,
-						"description": "ID data record",
-						"schema":      map[string]string{"type": "string"},
-					},
-				},
+				"summary":    fmt.Sprintf("Menghapus record dari tabel %s berdasarkan ID", tableName),
+				"tags":       []string{tableName},
+				"parameters": patchParams,
 				"responses": map[string]interface{}{
 					"200": map[string]interface{}{
 						"description": "Berhasil menghapus data",
