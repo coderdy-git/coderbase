@@ -214,12 +214,24 @@ func SwaggerSpecGenerator(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
+	scheme := "http"
+	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	baseURL := fmt.Sprintf("%s://%s", scheme, r.Host)
+
 	swaggerSpec := map[string]interface{}{
 		"openapi": "3.0.0",
 		"info": map[string]string{
 			"title":       fmt.Sprintf("Coderbase API Docs - %s", projectName),
 			"version":     "1.0.0",
 			"description": fmt.Sprintf("Dokumentasi REST API dinamis Coderbase BaaS untuk proyek %s.", projectName),
+		},
+		"servers": []map[string]string{
+			{
+				"url":         baseURL,
+				"description": "Server API Coderbase",
+			},
 		},
 		"paths":      paths,
 		"components": components,
