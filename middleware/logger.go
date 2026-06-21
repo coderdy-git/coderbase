@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"gobaas/db"
@@ -9,10 +10,11 @@ import (
 	"github.com/google/uuid"
 )
 
-// responseWriterInterceptor untuk membungkus http.ResponseWriter agar bisa merekam HTTP status code
+// responseWriterInterceptor untuk membungkus http.ResponseWriter agar bisa merekam HTTP status code & error body
 type responseWriterInterceptor struct {
 	http.ResponseWriter
 	statusCode int
+	body       []byte
 }
 
 func (w *responseWriterInterceptor) WriteHeader(code int) {
@@ -21,6 +23,9 @@ func (w *responseWriterInterceptor) WriteHeader(code int) {
 }
 
 func (w *responseWriterInterceptor) Write(b []byte) (int, error) {
+	if w.statusCode >= 400 {
+		w.body = append(w.body, b...)
+	}
 	return w.ResponseWriter.Write(b)
 }
 
@@ -50,17 +55,26 @@ func SystemLoggerMiddleware(next http.Handler) http.Handler {
 			ip = xff
 		}
 
-		go func(pid *string, method, path string, status int, ipAddress string, duration int64) {
+		// Ambil pesan error jika ada
+		var errMsg *string
+		if wi.statusCode >= 400 && len(wi.body) > 0 {
+			cleanMsg := strings.TrimSpace(string(wi.body))
+			if cleanMsg != "" {
+				errMsg = &cleanMsg
+			}
+		}
+
+		go func(pid *string, method, path string, status int, ipAddress string, duration int64, errStr *string) {
 			logID := uuid.New().String()
 			
-			query := `INSERT INTO logs (id, project_id, method, path, status, ip_address, latency_ms) 
-			         VALUES ($1, $2, $3, $4, $5, $6, $7)`
-			_, err := db.DB.Exec(query, logID, pid, method, path, status, ipAddress, duration)
+			query := `INSERT INTO logs (id, project_id, method, path, status, ip_address, latency_ms, error_message) 
+			         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+			_, err := db.DB.Exec(query, logID, pid, method, path, status, ipAddress, duration, errStr)
 			
 			if err != nil {
 				// Cukup cetak ke console jika log gagal disimpan, jangan crash
 				println("Gagal menyimpan log transaksi:", err.Error())
 			}
-		}(projectID, r.Method, r.URL.Path, wi.statusCode, ip, latency)
+		}(projectID, r.Method, r.URL.Path, wi.statusCode, ip, latency, errMsg)
 	})
 }

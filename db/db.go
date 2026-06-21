@@ -84,6 +84,7 @@ func createMetaTables() {
 			status INTEGER NOT NULL,
 			ip_address VARCHAR(45) NOT NULL,
 			latency_ms INTEGER NOT NULL,
+			error_message TEXT,
 			created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 		);`,
 	}
@@ -94,5 +95,12 @@ func createMetaTables() {
 			log.Fatalf("Gagal membuat tabel meta: %v\nQuery: %s", err, q)
 		}
 	}
+
+	// Migrasi otomatis: Tambahkan kolom error_message ke tabel logs jika belum ada di database yang sudah terpasang
+	_, err := DB.Exec("ALTER TABLE logs ADD COLUMN IF NOT EXISTS error_message TEXT;")
+	if err != nil {
+		log.Printf("Gagal menjalankan migrasi logs: %v", err)
+	}
+
 	log.Println("Tabel meta berhasil diinisialisasi.")
 }

@@ -3,6 +3,7 @@ package dashboard
 import (
 	"crypto/hmac"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -305,7 +306,14 @@ const dashboardHTML = `
                                 {{.Method}}
                             </span>
                         </td>
-                        <td class="p-3 text-zinc-300 font-mono text-[11px] truncate max-w-[180px]" title="{{.Path}}">{{.Path}}</td>
+                        <td class="p-3 text-zinc-300 font-mono text-[11px] max-w-[200px]" title="{{.Path}}">
+                            <span class="truncate block">{{.Path}}</span>
+                            {{if and (ge .Status 400) .ErrorMessage.Valid}}
+                            <div class="text-[9px] text-rose-400 font-sans mt-0.5 whitespace-pre-wrap break-all" title="{{.ErrorMessage.String}}">
+                                ❌ Error: {{.ErrorMessage.String}}
+                            </div>
+                            {{end}}
+                        </td>
                         <td class="p-3">
                             <span class="font-bold {{if lt .Status 300}}text-emerald-400{{else if lt .Status 400}}text-blue-400{{else}}text-rose-400{{end}}">
                                 {{.Status}}
@@ -1129,11 +1137,12 @@ type User struct {
 }
 
 type LogItem struct {
-	Method    string
-	Path      string
-	Status    int
-	Latency   int64
-	CreatedAt string
+	Method       string
+	Path         string
+	Status       int
+	Latency      int64
+	ErrorMessage sql.NullString
+	CreatedAt    string
 }
 
 type StatsInfo struct {
@@ -1245,13 +1254,13 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	logRows, err := db.DB.Query("SELECT method, path, status, latency_ms, created_at FROM logs ORDER BY created_at DESC LIMIT 15")
+	logRows, err := db.DB.Query("SELECT method, path, status, latency_ms, error_message, created_at FROM logs ORDER BY created_at DESC LIMIT 15")
 	logs := []LogItem{}
 	if err == nil {
 		defer logRows.Close()
 		for logRows.Next() {
 			var l LogItem
-			if err := logRows.Scan(&l.Method, &l.Path, &l.Status, &l.Latency, &l.CreatedAt); err == nil {
+			if err := logRows.Scan(&l.Method, &l.Path, &l.Status, &l.Latency, &l.ErrorMessage, &l.CreatedAt); err == nil {
 				logs = append(logs, l)
 			}
 		}
