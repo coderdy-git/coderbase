@@ -2,8 +2,10 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	_ "github.com/lib/pq"
 )
@@ -100,6 +102,26 @@ func createMetaTables() {
 	_, err := DB.Exec("ALTER TABLE logs ADD COLUMN IF NOT EXISTS error_message TEXT;")
 	if err != nil {
 		log.Printf("Gagal menjalankan migrasi logs: %v", err)
+	}
+
+	// Migrasi otomatis: Tambahkan kolom user_id ke seluruh tabel fisik yang sudah ada jika belum ada
+	tRows, err := DB.Query("SELECT project_id, name FROM tables")
+	if err == nil {
+		defer tRows.Close()
+		for tRows.Next() {
+			var projectID, tableName string
+			if err := tRows.Scan(&projectID, &tableName); err == nil {
+				// Format nama tabel fisik: p_projectid_tablename
+				cleanID := strings.ReplaceAll(projectID, "-", "_")
+				physicalName := fmt.Sprintf("p_%s_%s", cleanID, tableName)
+				
+				alterQuery := fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE SET NULL;", physicalName)
+				_, err = DB.Exec(alterQuery)
+				if err != nil {
+					log.Printf("Gagal migrasi kolom user_id pada tabel %s: %v", physicalName, err)
+				}
+			}
+		}
 	}
 
 	log.Println("Tabel meta berhasil diinisialisasi.")

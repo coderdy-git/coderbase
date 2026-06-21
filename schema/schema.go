@@ -87,6 +87,7 @@ func CreateTable(projectID string, tableName string) (string, error) {
 		CREATE TABLE %s (
 			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
 			project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+			user_id UUID REFERENCES users(id) ON DELETE SET NULL,
 			created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 			updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 		);

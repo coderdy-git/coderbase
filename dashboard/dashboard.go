@@ -1581,7 +1581,7 @@ func handleDashboardImportJSON(w http.ResponseWriter, r *http.Request) {
 		}
 		defer colRows.Close()
 
-		validCols := map[string]bool{"id": true, "project_id": true, "created_at": true, "updated_at": true}
+		validCols := map[string]bool{"id": true, "project_id": true, "user_id": true, "created_at": true, "updated_at": true}
 		for colRows.Next() {
 			var colName string
 			if err := colRows.Scan(&colName); err == nil {
@@ -1615,7 +1615,7 @@ func handleDashboardImportJSON(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 
-				if matchedCol == "" || matchedCol == "id" || matchedCol == "project_id" || matchedCol == "created_at" || matchedCol == "updated_at" {
+				if matchedCol == "" || matchedCol == "id" || matchedCol == "project_id" || matchedCol == "user_id" || matchedCol == "created_at" || matchedCol == "updated_at" {
 					continue
 				}
 

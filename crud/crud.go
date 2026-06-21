@@ -112,6 +112,7 @@ func getValidTableAndColumns(projectID, tableName string) (string, map[string]bo
 	validCols := map[string]bool{
 		"id":         true,
 		"project_id": true,
+		"user_id":    true,
 		"created_at": true,
 		"updated_at": true,
 	}
