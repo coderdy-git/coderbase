@@ -38,7 +38,7 @@ func main() {
 	policy.RegisterPolicyRoutes(r)
 
 	// Swagger API JSON Spec Endpoint
-	r.With(middleware.ApiKeyMiddleware).Get("/api/projects/{project_id}/swagger.json", schema.SwaggerSpecGenerator)
+	r.Get("/api/projects/{project_id}/swagger.json", schema.SwaggerSpecGenerator)
 
 	// WebSocket Realtime Endpoint
 	r.Get("/api/v1/realtime", realtime.HandleRealtime)

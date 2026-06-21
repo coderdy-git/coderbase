@@ -2,7 +2,10 @@ package middleware
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"database/sql"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -13,6 +16,25 @@ import (
 type contextKey string
 
 const ProjectIDKey contextKey = "project_id"
+
+// IsValidAdminSession memvalidasi session cookie dari dashboard
+func IsValidAdminSession(r *http.Request) bool {
+	cookie, err := r.Cookie("coderbase_session")
+	if err != nil {
+		return false
+	}
+
+	adminPass := os.Getenv("ADMIN_PASSWORD")
+	if adminPass == "" {
+		adminPass = "admin123"
+	}
+
+	h := hmac.New(sha256.New, []byte("coderbase_session_secret_key_v1"))
+	h.Write([]byte(adminPass))
+	expected := fmt.Sprintf("cb_sess_%x", h.Sum(nil))
+
+	return cookie.Value == expected
+}
 
 // ApiKeyMiddleware memvalidasi X-API-Key dari header dan menyimpan project_id ke context
 func ApiKeyMiddleware(next http.Handler) http.Handler {

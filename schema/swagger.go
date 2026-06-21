@@ -13,13 +13,30 @@ import (
 
 // SwaggerSpecGenerator merender OpenAPI 3.0 JSON spec secara dinamis berdasarkan skema tabel user
 func SwaggerSpecGenerator(w http.ResponseWriter, r *http.Request) {
-	projectIDFromURL := chi.URLParam(r, "project_id")
-	projectIDFromCtx, ok := r.Context().Value(middleware.ProjectIDKey).(string)
-	if !ok || projectIDFromURL != projectIDFromCtx {
-		http.Error(w, "Akses tidak sah untuk proyek ini (X-API-Key tidak valid)", http.StatusUnauthorized)
+	projectID := chi.URLParam(r, "project_id")
+	if projectID == "" {
+		http.Error(w, "project_id dibutuhkan", http.StatusBadRequest)
 		return
 	}
-	projectID := projectIDFromCtx
+
+	// 1. Cek apakah diakses oleh Admin via dashboard session cookie
+	if middleware.IsValidAdminSession(r) {
+		// Admin memiliki akses ke seluruh proyek di studio
+	} else {
+		// 2. Jika bukan admin dashboard, harus menggunakan X-API-Key yang valid
+		apiKey := r.Header.Get("X-API-Key")
+		if apiKey == "" {
+			http.Error(w, "API Key atau Session dibutuhkan untuk mengakses skema", http.StatusUnauthorized)
+			return
+		}
+
+		var projectIDFromKey string
+		err := db.DB.QueryRow("SELECT id FROM projects WHERE api_key = $1", apiKey).Scan(&projectIDFromKey)
+		if err != nil || projectID != projectIDFromKey {
+			http.Error(w, "Akses tidak sah untuk proyek ini (X-API-Key tidak valid)", http.StatusUnauthorized)
+			return
+		}
+	}
 
 	var projectName string
 	err := db.DB.QueryRow("SELECT name FROM projects WHERE id = $1", projectID).Scan(&projectName)
