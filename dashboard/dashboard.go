@@ -821,6 +821,7 @@ Contoh:
                             <th class="p-4">{{.Name}}</th>
                             {{end}}
                             <th class="p-4">Created At</th>
+                            <th class="p-4 text-right">Actions</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-zinc-800/40 bg-zinc-900/10">
@@ -846,6 +847,16 @@ Contoh:
                             </td>
                             {{end}}
                             <td class="p-4 text-zinc-550 font-mono whitespace-nowrap">{{index . "created_at"}}</td>
+                            <td class="p-4 text-right">
+                                <form action="/dashboard/projects/{{$.Project.ID}}/tables/{{$.Table.ID}}/rows/{{index $row "id"}}/delete" method="POST" class="inline" onsubmit="return confirm('Apakah Anda yakin ingin menghapus data dengan ID ini?')">
+                                    <button type="submit" class="text-rose-500 hover:text-rose-455 hover:bg-rose-500/10 p-1.5 rounded-md transition duration-150 inline-flex items-center justify-center" title="Hapus Baris">
+                                        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <polyline points="3 6 5 6 21 6"></polyline>
+                                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                        </svg>
+                                    </button>
+                                </form>
+                            </td>
                         </tr>
                         {{else}}
                         <tr>
@@ -1210,6 +1221,7 @@ func RegisterDashboardRoutes(r chi.Router) {
 		r.Post("/projects/{project_id}/tables/{table_id}/columns", handleDashboardAddColumn)
 		r.Post("/projects/{project_id}/tables/{table_id}/columns/{column_id}/delete", handleDashboardDeleteColumn)
 		r.Post("/projects/{project_id}/tables/{table_id}/import-json", handleDashboardImportJSON)
+		r.Post("/projects/{project_id}/tables/{table_id}/rows/{row_id}/delete", handleDashboardDeleteRow)
 		r.Post("/projects/{project_id}/tables/{table_id}/policies", handleDashboardCreatePolicy)
 		r.Post("/projects/{project_id}/tables/{table_id}/policies/delete", handleDashboardDeletePolicy)
 	})
@@ -1570,6 +1582,22 @@ func handleDashboardDeleteColumn(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, fmt.Sprintf("/dashboard/projects/%s/tables/%s", projectID, tableID), http.StatusSeeOther)
 }
 
+func handleDashboardDeleteRow(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "project_id")
+	tableID := chi.URLParam(r, "table_id")
+	rowID := chi.URLParam(r, "row_id")
+
+	if projectID != "" && tableID != "" && rowID != "" {
+		var tableName string
+		err := db.DB.QueryRow("SELECT name FROM tables WHERE id = $1 AND project_id = $2", tableID, projectID).Scan(&tableName)
+		if err == nil {
+			physicalTable := schema.FormatPhysicalTableName(projectID, tableName)
+			_, _ = db.DB.Exec(fmt.Sprintf("DELETE FROM %s WHERE project_id = $1 AND id = $2", physicalTable), projectID, rowID)
+		}
+	}
+	http.Redirect(w, r, fmt.Sprintf("/dashboard/projects/%s/tables/%s", projectID, tableID), http.StatusSeeOther)
+}
+
 func handleDashboardImportJSON(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "project_id")
 	tableID := chi.URLParam(r, "table_id")
@@ -1631,6 +1659,9 @@ func handleDashboardImportJSON(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 				if matchedCol != "" {
+					if str, ok := val.(string); ok {
+						val = strings.ToLower(str)
+					}
 					normalizedInput[matchedCol] = val
 				}
 			}
@@ -1652,21 +1683,12 @@ func handleDashboardImportJSON(w http.ResponseWriter, r *http.Request) {
 			values := []interface{}{rowID, projectID}
 
 			paramIndex := 3
-			for col, val := range input {
-				normalizedCol := strings.ReplaceAll(col, " ", "_")
-				matchedCol := ""
-				for validColName := range validCols {
-					if strings.EqualFold(validColName, normalizedCol) {
-						matchedCol = validColName
-						break
-					}
-				}
-
-				if matchedCol == "" || matchedCol == "id" || matchedCol == "project_id" || matchedCol == "user_id" || matchedCol == "created_at" || matchedCol == "updated_at" {
+			for col, val := range normalizedInput {
+				if col == "id" || col == "project_id" || col == "user_id" || col == "created_at" || col == "updated_at" {
 					continue
 				}
 
-				columns = append(columns, matchedCol)
+				columns = append(columns, col)
 				placeholders = append(placeholders, fmt.Sprintf("$%d", paramIndex))
 
 				switch v := val.(type) {

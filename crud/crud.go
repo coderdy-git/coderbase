@@ -233,6 +233,13 @@ func handleInsert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Ubah semua input string menjadi huruf kecil
+	for col, val := range input {
+		if str, ok := val.(string); ok {
+			input[col] = strings.ToLower(str)
+		}
+	}
+
 	// Deteksi dan buat kolom baru secara dinamis berdasarkan input data pertama/baru
 	hasNewCols := false
 	for col, val := range input {
