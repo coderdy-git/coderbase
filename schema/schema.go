@@ -195,3 +195,36 @@ func DropColumn(projectID string, tableID string, columnID string) error {
 
 	return tx.Commit()
 }
+
+func DropTable(projectID string, tableID string) error {
+	var tableName string
+	err := db.DB.QueryRow("SELECT name FROM tables WHERE id = $1 AND project_id = $2", tableID, projectID).Scan(&tableName)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return errors.New("tabel tidak ditemukan")
+		}
+		return err
+	}
+
+	tx, err := db.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// Hapus metadata tabel (foreign keys cascade will delete columns and policies)
+	_, err = tx.Exec("DELETE FROM tables WHERE id = $1", tableID)
+	if err != nil {
+		return err
+	}
+
+	// DROP TABLE DDL
+	physicalTableName := FormatPhysicalTableName(projectID, tableName)
+	dropTableDDL := fmt.Sprintf("DROP TABLE %s;", physicalTableName)
+	_, err = tx.Exec(dropTableDDL)
+	if err != nil {
+		return fmt.Errorf("gagal menghapus tabel fisik %s: %v", physicalTableName, err)
+	}
+
+	return tx.Commit()
+}

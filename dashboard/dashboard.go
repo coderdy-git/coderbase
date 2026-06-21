@@ -514,10 +514,18 @@ const projectHTML = `
                         </div>
                     </td>
                     <td class="p-4 text-right">
-                        <a href="/dashboard/projects/{{$.Project.ID}}/tables/{{.ID}}" class="inline-flex items-center gap-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700/80 px-3.5 py-1.5 text-xs font-bold text-zinc-300 border border-zinc-700/50 hover:border-zinc-600 transition">
-                            View Data
-                            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                        </a>
+                        <div class="flex items-center justify-end gap-2">
+                            <a href="/dashboard/projects/{{$.Project.ID}}/tables/{{.ID}}" class="inline-flex items-center gap-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700/80 px-3.5 py-1.5 text-xs font-bold text-zinc-300 border border-zinc-700/50 hover:border-zinc-600 transition">
+                                View Data
+                                <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                            </a>
+                            <form action="/dashboard/projects/{{$.Project.ID}}/tables/{{.ID}}/delete" method="POST" class="inline" onsubmit="return confirm('Apakah Anda yakin ingin menghapus tabel {{.Name}}? Seluruh data fisik, kolom, dan policy akan dihapus secara permanen.')">
+                                <button type="submit" class="inline-flex items-center gap-1.5 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-350 px-3.5 py-1.5 text-xs font-bold border border-rose-500/20 hover:border-rose-500/30 transition">
+                                    Hapus
+                                    <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
+                                </button>
+                            </form>
+                        </div>
                     </td>
                 </tr>
                 {{else}}
@@ -1196,6 +1204,7 @@ func RegisterDashboardRoutes(r chi.Router) {
 		r.Get("/projects/{project_id}/swagger-iframe", handleDashboardSwaggerIframe)
 		r.Post("/projects/{project_id}/users", handleDashboardCreateUser)
 		r.Post("/projects/{project_id}/tables", handleDashboardCreateTable)
+		r.Post("/projects/{project_id}/tables/{table_id}/delete", handleDashboardDeleteTable)
 		r.Get("/projects/{project_id}/tables/{table_id}", handleDashboardTableDetail)
 		r.Post("/projects/{project_id}/tables/{table_id}/columns", handleDashboardAddColumn)
 		r.Post("/projects/{project_id}/tables/{table_id}/columns/{column_id}/delete", handleDashboardDeleteColumn)
@@ -1537,6 +1546,16 @@ func handleDashboardDeletePolicy(w http.ResponseWriter, r *http.Request) {
 		_, _ = db.DB.Exec(query, policyID, tableID)
 	}
 	http.Redirect(w, r, fmt.Sprintf("/dashboard/projects/%s/tables/%s", projectID, tableID), http.StatusSeeOther)
+}
+
+func handleDashboardDeleteTable(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "project_id")
+	tableID := chi.URLParam(r, "table_id")
+
+	if projectID != "" && tableID != "" {
+		_ = schema.DropTable(projectID, tableID)
+	}
+	http.Redirect(w, r, fmt.Sprintf("/dashboard/projects/%s", projectID), http.StatusSeeOther)
 }
 
 func handleDashboardDeleteColumn(w http.ResponseWriter, r *http.Request) {

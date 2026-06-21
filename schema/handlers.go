@@ -28,8 +28,30 @@ func RegisterSchemaRoutes(r chi.Router) {
 		r.Use(middleware.AdminKeyMiddleware)
 		r.Post("/", handleCreateProject)
 		r.Post("/{project_id}/tables", handleCreateTable)
+		r.Delete("/{project_id}/tables/{table_id}", handleDropTable)
 		r.Post("/{project_id}/tables/{table_id}/columns", handleAddColumn)
 		r.Delete("/{project_id}/tables/{table_id}/columns/{column_id}", handleDropColumn)
+	})
+}
+
+func handleDropTable(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "project_id")
+	tableID := chi.URLParam(r, "table_id")
+
+	if projectID == "" || tableID == "" {
+		http.Error(w, "project_id dan table_id dibutuhkan", http.StatusBadRequest)
+		return
+	}
+
+	err := DropTable(projectID, tableID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Tabel berhasil dihapus",
 	})
 }
 
