@@ -1,0 +1,15 @@
+# Local database files
+gobaas.db
+
+# Binaries and logs
+*.exe
+*.dll
+*.so
+*.dylib
+*.log
+bin/
+tmp/
+
+# OS metadata
+.DS_Store
+Thumbs.db

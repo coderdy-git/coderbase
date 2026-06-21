@@ -1,0 +1,29 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: gobaas_db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secretpassword
+      POSTGRES_DB: gobaas
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  gobaas:
+    build: .
+    container_name: gobaas_app
+    restart: always
+    ports:
+      - "8080:8080"
+    environment:
+      - DATABASE_URL=postgres://postgres:secretpassword@postgres:5432/gobaas?sslmode=disable
+      - PORT=8080
+      - JWT_SECRET=gobaas_super_secret_key_change_me_in_prod
+    depends_on:
+      - postgres
+
+volumes:
+  pgdata:

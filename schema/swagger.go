@@ -1,0 +1,213 @@
+package schema
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+
+	"gobaas/db"
+
+	"github.com/go-chi/chi/v5"
+)
+
+// SwaggerSpecGenerator merender OpenAPI 3.0 JSON spec secara dinamis berdasarkan skema tabel user
+func SwaggerSpecGenerator(w http.ResponseWriter, r *http.Request) {
+	projectID := chi.URLParam(r, "project_id")
+	if projectID == "" {
+		http.Error(w, "project_id dibutuhkan", http.StatusBadRequest)
+		return
+	}
+
+	var projectName string
+	err := db.DB.QueryRow("SELECT name FROM projects WHERE id = $1", projectID).Scan(&projectName)
+	if err != nil {
+		http.Error(w, "Project tidak ditemukan", http.StatusNotFound)
+		return
+	}
+
+	// Ambil semua tabel
+	tRows, err := db.DB.Query("SELECT id, name FROM tables WHERE project_id = $1", projectID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer tRows.Close()
+
+	paths := make(map[string]interface{})
+	components := make(map[string]interface{})
+	schemas := make(map[string]interface{})
+
+	for tRows.Next() {
+		var tableID, tableName string
+		if err := tRows.Scan(&tableID, &tableName); err != nil {
+			continue
+		}
+
+		// Ambil kolom tabel
+		cRows, err := db.DB.Query("SELECT name, type, is_nullable FROM columns WHERE table_id = $1", tableID)
+		if err != nil {
+			continue
+		}
+
+		properties := make(map[string]interface{})
+		// Kolom bawaan sistem
+		properties["id"] = map[string]string{"type": "string", "format": "uuid"}
+		properties["project_id"] = map[string]string{"type": "string", "format": "uuid"}
+		properties["created_at"] = map[string]string{"type": "string", "format": "date-time"}
+		properties["updated_at"] = map[string]string{"type": "string", "format": "date-time"}
+
+		for cRows.Next() {
+			var colName, colType string
+			var isNullable int
+			if err := cRows.Scan(&colName, &colType, &isNullable); err == nil {
+				swaggerType := "string"
+				if colType == "integer" || colType == "int" {
+					swaggerType = "integer"
+				} else if colType == "boolean" || colType == "bool" {
+					swaggerType = "boolean"
+				} else if colType == "float" || colType == "double" {
+					swaggerType = "number"
+				} else if colType == "jsonb" || colType == "json" {
+					swaggerType = "object"
+				}
+				properties[colName] = map[string]string{"type": swaggerType}
+			}
+		}
+		cRows.Close()
+
+		// Definisikan Model Schema
+		schemas[tableName] = map[string]interface{}{
+			"type":       "object",
+			"properties": properties,
+		}
+
+		// Rute GET / POST untuk tabel ini
+		tablePath := fmt.Sprintf("/api/v1/tables/%s", tableName)
+		paths[tablePath] = map[string]interface{}{
+			"get": map[string]interface{}{
+				"summary":     fmt.Sprintf("Mendapatkan seluruh record dari tabel %s", tableName),
+				"tags":        []string{tableName},
+				"parameters":  []interface{}{},
+				"responses": map[string]interface{}{
+					"200": map[string]interface{}{
+						"description": "Berhasil mengambil data list",
+						"content": map[string]interface{}{
+							"application/json": map[string]interface{}{
+								"schema": map[string]interface{}{
+									"type": "array",
+									"items": map[string]string{
+										"$ref": fmt.Sprintf("#/components/schemas/%s", tableName),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			"post": map[string]interface{}{
+				"summary": fmt.Sprintf("Memasukkan record baru ke tabel %s", tableName),
+				"tags":    []string{tableName},
+				"requestBody": map[string]interface{}{
+					"required": true,
+					"content": map[string]interface{}{
+						"application/json": map[string]interface{}{
+							"schema": map[string]string{
+								"$ref": fmt.Sprintf("#/components/schemas/%s", tableName),
+							},
+						},
+					},
+				},
+				"responses": map[string]interface{}{
+					"201": map[string]interface{}{
+						"description": "Berhasil membuat data",
+						"content": map[string]interface{}{
+							"application/json": map[string]interface{}{
+								"schema": map[string]string{
+									"$ref": fmt.Sprintf("#/components/schemas/%s", tableName),
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		// Rute PATCH / DELETE untuk tabel ini
+		itemPath := fmt.Sprintf("/api/v1/tables/%s/{id}", tableName)
+		paths[itemPath] = map[string]interface{}{
+			"patch": map[string]interface{}{
+				"summary": fmt.Sprintf("Memperbarui record di tabel %s berdasarkan ID", tableName),
+				"tags":    []string{tableName},
+				"parameters": []map[string]interface{}{
+					{
+						"name":        "id",
+						"in":          "path",
+						"required":    true,
+						"description": "ID data record",
+						"schema":      map[string]string{"type": "string"},
+					},
+				},
+				"requestBody": map[string]interface{}{
+					"required": true,
+					"content": map[string]interface{}{
+						"application/json": map[string]interface{}{
+							"schema": map[string]string{
+								"$ref": fmt.Sprintf("#/components/schemas/%s", tableName),
+							},
+						},
+					},
+				},
+				"responses": map[string]interface{}{
+					"200": map[string]interface{}{
+						"description": "Berhasil memperbarui data",
+					},
+				},
+			},
+			"delete": map[string]interface{}{
+				"summary": fmt.Sprintf("Menghapus record dari tabel %s berdasarkan ID", tableName),
+				"tags":    []string{tableName},
+				"parameters": []map[string]interface{}{
+					{
+						"name":        "id",
+						"in":          "path",
+						"required":    true,
+						"description": "ID data record",
+						"schema":      map[string]string{"type": "string"},
+					},
+				},
+				"responses": map[string]interface{}{
+					"200": map[string]interface{}{
+						"description": "Berhasil menghapus data",
+					},
+				},
+			},
+		}
+	}
+
+	components["schemas"] = schemas
+	// Definisikan autentikasi API Key
+	components["securitySchemes"] = map[string]interface{}{
+		"ApiKeyAuth": map[string]string{
+			"type": "apiKey",
+			"in":   "header",
+			"name": "X-API-Key",
+		},
+	}
+
+	swaggerSpec := map[string]interface{}{
+		"openapi": "3.0.0",
+		"info": map[string]string{
+			"title":       fmt.Sprintf("Coderbase API Docs - %s", projectName),
+			"version":     "1.0.0",
+			"description": fmt.Sprintf("Dokumentasi REST API dinamis Coderbase BaaS untuk proyek %s.", projectName),
+		},
+		"paths":      paths,
+		"components": components,
+		"security": []map[string]interface{}{
+			{"ApiKeyAuth": []string{}},
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(swaggerSpec)
+}
