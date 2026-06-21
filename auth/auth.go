@@ -150,14 +150,22 @@ func UserAuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Format: Bearer <token>
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
+		// Toleran terhadap single/double Bearer prefix (e.g. "Bearer Bearer <token>" dari Swagger UI)
+		tokenString := authHeader
+		for {
+			tokenString = strings.TrimSpace(tokenString)
+			if len(tokenString) > 7 && strings.EqualFold(tokenString[:7], "bearer ") {
+				tokenString = tokenString[7:]
+			} else {
+				break
+			}
+		}
+		tokenString = strings.TrimSpace(tokenString)
+
+		if tokenString == "" {
 			http.Error(w, "Format Authorization tidak valid", http.StatusUnauthorized)
 			return
 		}
-
-		tokenString := parts[1]
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 			return jwtSecret, nil
 		})
