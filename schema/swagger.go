@@ -119,13 +119,38 @@ func SwaggerSpecGenerator(w http.ResponseWriter, r *http.Request) {
 			},
 		}
 
+		// Parameter kueri (pagination) untuk GET
+		getParams := append([]interface{}{
+			map[string]interface{}{
+				"name":        "limit",
+				"in":          "query",
+				"required":    false,
+				"description": "Jumlah maksimal data yang diambil (default 100, max 1000)",
+				"schema":      map[string]interface{}{"type": "integer", "default": 100},
+			},
+			map[string]interface{}{
+				"name":        "page",
+				"in":          "query",
+				"required":    false,
+				"description": "Nomor halaman data yang ingin diambil (misal: 1, 2, ...)",
+				"schema":      map[string]interface{}{"type": "integer", "default": 1},
+			},
+			map[string]interface{}{
+				"name":        "offset",
+				"in":          "query",
+				"required":    false,
+				"description": "Jumlah baris data yang dilewati (alternatif dari 'page')",
+				"schema":      map[string]interface{}{"type": "integer", "default": 0},
+			},
+		}, headerParams...)
+
 		// Rute GET / POST untuk tabel ini
 		tablePath := fmt.Sprintf("/api/v1/tables/%s", tableName)
 		paths[tablePath] = map[string]interface{}{
 			"get": map[string]interface{}{
-				"summary":    fmt.Sprintf("Mendapatkan seluruh record dari tabel %s", tableName),
+				"summary":    fmt.Sprintf("Mendapatkan record dari tabel %s dengan batasan pagination", tableName),
 				"tags":       []string{tableName},
-				"parameters": headerParams,
+				"parameters": getParams,
 				"responses": map[string]interface{}{
 					"200": map[string]interface{}{
 						"description": "Berhasil mengambil data list",
