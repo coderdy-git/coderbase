@@ -515,18 +515,10 @@ const projectHTML = `
                         </div>
                     </td>
                     <td class="p-4 text-right">
-                        <div class="flex items-center justify-end gap-2">
-                            <a href="/dashboard/projects/{{$.Project.ID}}/tables/{{.ID}}" class="inline-flex items-center gap-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700/80 px-3.5 py-1.5 text-xs font-bold text-zinc-300 border border-zinc-700/50 hover:border-zinc-600 transition">
-                                View Data
-                                <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                            </a>
-                            <form action="/dashboard/projects/{{$.Project.ID}}/tables/{{.ID}}/delete" method="POST" class="inline" onsubmit="return confirm('Apakah Anda yakin ingin menghapus tabel {{.Name}}? Seluruh data fisik, kolom, dan policy akan dihapus secara permanen.')">
-                                <button type="submit" class="inline-flex items-center gap-1.5 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-350 px-3.5 py-1.5 text-xs font-bold border border-rose-500/20 hover:border-rose-500/30 transition">
-                                    Hapus
-                                    <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
-                                </button>
-                            </form>
-                        </div>
+                        <a href="/dashboard/projects/{{$.Project.ID}}/tables/{{.ID}}" class="inline-flex items-center gap-1.5 rounded-md bg-zinc-800 hover:bg-zinc-700/80 px-3.5 py-1.5 text-xs font-bold text-zinc-300 border border-zinc-700/50 hover:border-zinc-600 transition">
+                            View Data
+                            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                        </a>
                     </td>
                 </tr>
                 {{else}}
@@ -770,6 +762,14 @@ const tableHTML = `
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
             </svg>
             Security Policies (RLS)
+        </button>
+        <button onclick="switchTab('tab-danger')" id="btn-tab-danger" class="tab-btn pb-4 px-1 border-b-2 border-transparent text-zinc-400 hover:text-zinc-200 transition inline-flex items-center gap-2">
+            <svg class="h-4 w-4 text-rose-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                <line x1="12" y1="9" x2="12" y2="13"></line>
+                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+            </svg>
+            Danger Zone
         </button>
     </nav>
 </div>
@@ -1086,6 +1086,27 @@ Contoh:
                     </button>
                 </form>
             </div>
+        </div>
+    </div>
+
+    <!-- Tab 4: DANGER ZONE -->
+    <div id="content-tab-danger" class="tab-content hidden">
+        <div class="rounded-xl border border-rose-500/25 bg-rose-500/5 p-6 space-y-4">
+            <div>
+                <h3 class="text-sm font-bold text-rose-400 uppercase tracking-wider">Hapus Tabel Ini</h3>
+                <p class="text-xs text-zinc-400 mt-1">Menghapus tabel ini akan menghapus seluruh data fisik di database, semua skema kolom kustom, serta kebijakan keamanan (RLS policy) secara permanen. Tindakan ini tidak dapat dibatalkan!</p>
+            </div>
+            
+            <form action="/dashboard/projects/{{$.Project.ID}}/tables/{{$.Table.ID}}/delete" method="POST" class="inline" onsubmit="return confirm('Apakah Anda yakin ingin menghapus tabel {{$.Table.Name}}? Seluruh data fisik dan policy akan hilang permanen.')">
+                <button type="submit" class="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white px-4 py-2.5 text-xs font-bold transition shadow-md">
+                    Hapus Tabel Permanen
+                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 6h18"></path>
+                        <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path>
+                        <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                    </svg>
+                </button>
+            </form>
         </div>
     </div>
 
