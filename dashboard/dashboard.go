@@ -1228,23 +1228,41 @@ func RegisterDashboardRoutes(r chi.Router) {
 		r.Post("/login", handleDashboardLoginPost)
 		r.Post("/logout", handleDashboardLogout)
 
-		r.Get("/", handleIndex)
-		r.Get("/projects-list", handleProjectsList)
-		r.Post("/projects", handleDashboardCreateProject)
-		r.Get("/projects/{project_id}", handleDashboardProjectDetail)
-		r.Get("/projects/{project_id}/auth", handleDashboardProjectAuth)
-		r.Get("/projects/{project_id}/docs", handleDashboardProjectDocs)
-		r.Get("/projects/{project_id}/swagger-iframe", handleDashboardSwaggerIframe)
-		r.Post("/projects/{project_id}/users", handleDashboardCreateUser)
-		r.Post("/projects/{project_id}/tables", handleDashboardCreateTable)
-		r.Post("/projects/{project_id}/tables/{table_id}/delete", handleDashboardDeleteTable)
-		r.Get("/projects/{project_id}/tables/{table_id}", handleDashboardTableDetail)
-		r.Post("/projects/{project_id}/tables/{table_id}/columns", handleDashboardAddColumn)
-		r.Post("/projects/{project_id}/tables/{table_id}/columns/{column_id}/delete", handleDashboardDeleteColumn)
-		r.Post("/projects/{project_id}/tables/{table_id}/import-json", handleDashboardImportJSON)
-		r.Post("/projects/{project_id}/tables/{table_id}/rows/{row_id}/delete", handleDashboardDeleteRow)
-		r.Post("/projects/{project_id}/tables/{table_id}/policies", handleDashboardCreatePolicy)
-		r.Post("/projects/{project_id}/tables/{table_id}/policies/delete", handleDashboardDeletePolicy)
+		// JSON API endpoints for Vue SPA Client
+		r.Route("/api", func(r chi.Router) {
+			r.Get("/status", handleAPIGetStatus)
+			r.Get("/stats", handleAPIGetStats)
+			r.Get("/logs", handleAPIGetLogs)
+			r.Get("/projects", handleAPIGetProjects)
+			r.Post("/projects", handleAPICreateProject)
+			r.Get("/projects/{project_id}", handleAPIGetProjectDetail)
+			r.Post("/projects/{project_id}/tables", handleAPICreateTable)
+			r.Post("/projects/{project_id}/tables/{table_id}/delete", handleAPIDeleteTable)
+			r.Get("/projects/{project_id}/tables/{table_id}", handleAPIGetTableDetail)
+			r.Post("/projects/{project_id}/tables/{table_id}/columns", handleAPIAddColumn)
+			r.Post("/projects/{project_id}/tables/{table_id}/columns/{column_id}/delete", handleAPIDeleteColumn)
+			r.Post("/projects/{project_id}/tables/{table_id}/import-json", handleAPIImportJSON)
+			r.Post("/projects/{project_id}/tables/{table_id}/rows/{row_id}/delete", handleAPIDeleteRow)
+			r.Get("/projects/{project_id}/users", handleAPIGetUsers)
+			r.Post("/projects/{project_id}/users", handleAPICreateUser)
+			r.Post("/projects/{project_id}/tables/{table_id}/policies", handleAPICreatePolicy)
+			r.Post("/projects/{project_id}/tables/{table_id}/policies/delete", handleAPIDeletePolicy)
+		})
+
+		// Serves compiled Vue SPA client assets
+		fs := http.FileServer(http.Dir("studio/dist"))
+		r.Handle("/*", http.StripPrefix("/dashboard", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// If path is a real file inside dist directory, serve it
+			path := r.URL.Path
+			if path != "" && path != "/" {
+				if _, err := os.Stat("studio/dist" + path); err == nil {
+					fs.ServeHTTP(w, r)
+					return
+				}
+			}
+			// Otherwise serve index.html for client-side SPA routing
+			http.ServeFile(w, r, "studio/dist/index.html")
+		})))
 	})
 }
 
