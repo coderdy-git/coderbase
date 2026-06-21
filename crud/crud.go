@@ -93,19 +93,19 @@ func getOneRecord(physicalTable string, validCols map[string]bool, projectID, id
 	return nil, sql.ErrNoRows
 }
 
-func getValidTableAndColumns(projectID, tableName string) (string, map[string]bool, error) {
+func getValidTableAndColumns(projectID, tableName string) (string, string, map[string]bool, error) {
 	var tableID string
 	err := db.DB.QueryRow("SELECT id FROM tables WHERE project_id = $1 AND name = $2", projectID, tableName).Scan(&tableID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return "", nil, fmt.Errorf("tabel '%s' tidak ditemukan", tableName)
+			return "", "", nil, fmt.Errorf("tabel '%s' tidak ditemukan", tableName)
 		}
-		return "", nil, err
+		return "", "", nil, err
 	}
 
 	rows, err := db.DB.Query("SELECT name FROM columns WHERE table_id = $1", tableID)
 	if err != nil {
-		return "", nil, err
+		return "", "", nil, err
 	}
 	defer rows.Close()
 
@@ -125,7 +125,7 @@ func getValidTableAndColumns(projectID, tableName string) (string, map[string]bo
 	}
 
 	physicalTable := schema.FormatPhysicalTableName(projectID, tableName)
-	return physicalTable, validCols, nil
+	return tableID, physicalTable, validCols, nil
 }
 
 func handleGet(w http.ResponseWriter, r *http.Request) {
@@ -133,7 +133,7 @@ func handleGet(w http.ResponseWriter, r *http.Request) {
 	tableName := chi.URLParam(r, "table_name")
 	userID := getUserIDFromContext(r)
 
-	physicalTable, validCols, err := getValidTableAndColumns(projectID, tableName)
+	_, physicalTable, validCols, err := getValidTableAndColumns(projectID, tableName)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
@@ -214,7 +214,7 @@ func handleInsert(w http.ResponseWriter, r *http.Request) {
 	tableName := chi.URLParam(r, "table_name")
 	userID := getUserIDFromContext(r)
 
-	physicalTable, validCols, err := getValidTableAndColumns(projectID, tableName)
+	tableID, physicalTable, validCols, err := getValidTableAndColumns(projectID, tableName)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
@@ -231,6 +231,47 @@ func handleInsert(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		http.Error(w, "JSON request tidak valid", http.StatusBadRequest)
 		return
+	}
+
+	// Deteksi dan buat kolom baru secara dinamis berdasarkan input data pertama/baru
+	hasNewCols := false
+	for col, val := range input {
+		if !schema.IsSafeName(col) {
+			continue // Abaikan kolom dengan nama tidak valid
+		}
+
+		if !validCols[col] && col != "id" && col != "project_id" && col != "user_id" && col != "created_at" && col != "updated_at" {
+			// Tentukan tipe data
+			colType := "text"
+			switch v := val.(type) {
+			case bool:
+				colType = "boolean"
+			case float64:
+				if v == float64(int64(v)) {
+					colType = "integer"
+				} else {
+					colType = "float"
+				}
+			case string:
+				colType = "text"
+			case map[string]interface{}, []interface{}:
+				colType = "jsonb"
+			}
+
+			// Buat kolom di database & metadata secara dinamis!
+			_, err := schema.AddColumn(projectID, tableID, col, colType, true)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("Gagal membuat kolom baru otomatis '%s': %v", col, err), http.StatusInternalServerError)
+				return
+			}
+			validCols[col] = true
+			hasNewCols = true
+		}
+	}
+
+	// Jika ada kolom baru, refresh validCols agar sinkron
+	if hasNewCols {
+		_, _, validCols, _ = getValidTableAndColumns(projectID, tableName)
 	}
 
 	rowID := uuid.New().String()
@@ -299,7 +340,7 @@ func handleUpdate(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	userID := getUserIDFromContext(r)
 
-	physicalTable, validCols, err := getValidTableAndColumns(projectID, tableName)
+	_, physicalTable, validCols, err := getValidTableAndColumns(projectID, tableName)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
@@ -377,7 +418,7 @@ func handleDelete(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	userID := getUserIDFromContext(r)
 
-	physicalTable, _, err := getValidTableAndColumns(projectID, tableName)
+	_, physicalTable, _, err := getValidTableAndColumns(projectID, tableName)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
