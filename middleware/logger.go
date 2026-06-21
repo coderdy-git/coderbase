@@ -50,22 +50,12 @@ func SystemLoggerMiddleware(next http.Handler) http.Handler {
 			ip = xff
 		}
 
-		// Simpan log secara asynchronous agar tidak memblokir response HTTP client
 		go func(pid *string, method, path string, status int, ipAddress string, duration int64) {
 			logID := uuid.New().String()
 			
-			var query string
-			var err error
-			if db.DBType == "postgres" {
-				query = `INSERT INTO logs (id, project_id, method, path, status, ip_address, latency_ms) 
-				         VALUES ($1, $2, $3, $4, $5, $6, $7)`
-				_, err = db.DB.Exec(query, logID, pid, method, path, status, ipAddress, duration)
-			} else {
-				// SQLite
-				query = `INSERT INTO logs (id, project_id, method, path, status, ip_address, latency_ms) 
-				         VALUES (?, ?, ?, ?, ?, ?, ?)`
-				_, err = db.DB.Exec(query, logID, pid, method, path, status, ipAddress, duration)
-			}
+			query := `INSERT INTO logs (id, project_id, method, path, status, ip_address, latency_ms) 
+			         VALUES ($1, $2, $3, $4, $5, $6, $7)`
+			_, err := db.DB.Exec(query, logID, pid, method, path, status, ipAddress, duration)
 			
 			if err != nil {
 				// Cukup cetak ke console jika log gagal disimpan, jangan crash

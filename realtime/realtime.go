@@ -35,6 +35,8 @@ type Client struct {
 	subscribed  map[string]bool // Menyimpan nama tabel yang di-subscribe
 	mu          sync.Mutex
 	send        chan []byte
+	closed      bool
+	closeOnce   sync.Once
 }
 
 type Hub struct {
@@ -50,6 +52,30 @@ var GlobalHub = &Hub{
 	unregister: make(chan *Client),
 }
 
+func (c *Client) close() {
+	c.closeOnce.Do(func() {
+		c.mu.Lock()
+		c.closed = true
+		close(c.send)
+		c.mu.Unlock()
+		c.conn.Close()
+	})
+}
+
+func (c *Client) sendMsg(msg []byte) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed {
+		return false
+	}
+	select {
+	case c.send <- msg:
+		return true
+	default:
+		return false
+	}
+}
+
 func (h *Hub) Run() {
 	for {
 		select {
@@ -63,7 +89,7 @@ func (h *Hub) Run() {
 			h.mu.Lock()
 			if _, ok := h.clients[client]; ok {
 				delete(h.clients, client)
-				close(client.send)
+				client.close()
 				log.Printf("Client terputus dari Realtime. Project: %s", client.projectID)
 			}
 			h.mu.Unlock()
@@ -91,19 +117,17 @@ func (h *Hub) Broadcast(projectID, tableName, action string, record interface{})
 	for client := range h.clients {
 		if client.projectID == projectID {
 			client.mu.Lock()
-			// Hanya kirim jika client men-subscribe tabel tersebut
-			if client.subscribed[tableName] {
-				select {
-				case client.send <- messageBytes:
-				default:
-					// Jika buffer penuh, putuskan client
+			isSubscribed := client.subscribed[tableName]
+			client.mu.Unlock()
+
+			if isSubscribed {
+				if !client.sendMsg(messageBytes) {
+					// Jika gagal (buffer penuh atau closed), putuskan client
 					go func(c *Client) {
 						h.unregister <- c
-						c.conn.Close()
 					}(client)
 				}
 			}
-			client.mu.Unlock()
 		}
 	}
 }
@@ -116,7 +140,6 @@ type SocketMessage struct {
 func (c *Client) readPump() {
 	defer func() {
 		GlobalHub.unregister <- c
-		c.conn.Close()
 	}()
 
 	for {
@@ -127,7 +150,7 @@ func (c *Client) readPump() {
 
 		var msg SocketMessage
 		if err := json.Unmarshal(message, &msg); err != nil {
-			c.send <- []byte(`{"error": "Format pesan tidak valid"}`)
+			c.sendMsg([]byte(`{"error": "Format pesan tidak valid"}`))
 			continue
 		}
 
@@ -135,13 +158,16 @@ func (c *Client) readPump() {
 		switch msg.Event {
 		case "subscribe":
 			c.subscribed[msg.Table] = true
-			c.send <- []byte(`{"status": "subscribed", "table": "` + msg.Table + `"}`)
+			c.mu.Unlock()
+			c.sendMsg([]byte(`{"status": "subscribed", "table": "` + msg.Table + `"}`))
 			log.Printf("Project %s mensubscribe tabel %s", c.projectID, msg.Table)
 		case "unsubscribe":
 			delete(c.subscribed, msg.Table)
-			c.send <- []byte(`{"status": "unsubscribed", "table": "` + msg.Table + `"}`)
+			c.mu.Unlock()
+			c.sendMsg([]byte(`{"status": "unsubscribed", "table": "` + msg.Table + `"}`))
+		default:
+			c.mu.Unlock()
 		}
-		c.mu.Unlock()
 	}
 }
 

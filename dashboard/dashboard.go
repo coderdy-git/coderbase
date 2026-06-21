@@ -1201,11 +1201,7 @@ func cleanUUIDFunc(uuidStr string) string {
 }
 
 func renderWithLayout(w http.ResponseWriter, name string, contentTmpl string, data map[string]interface{}) {
-	dbName := "SQLite"
-	if db.DBType == "postgres" {
-		dbName = "PostgreSQL"
-	}
-	data["DBType"] = dbName
+	data["DBType"] = "PostgreSQL"
 
 	tmpl, err := template.New("layout").Funcs(template.FuncMap{
 		"cleanUUID": cleanUUIDFunc,

@@ -6,17 +6,20 @@ import (
 	"net/http"
 
 	"gobaas/db"
+	"gobaas/middleware"
 
 	"github.com/go-chi/chi/v5"
 )
 
 // SwaggerSpecGenerator merender OpenAPI 3.0 JSON spec secara dinamis berdasarkan skema tabel user
 func SwaggerSpecGenerator(w http.ResponseWriter, r *http.Request) {
-	projectID := chi.URLParam(r, "project_id")
-	if projectID == "" {
-		http.Error(w, "project_id dibutuhkan", http.StatusBadRequest)
+	projectIDFromURL := chi.URLParam(r, "project_id")
+	projectIDFromCtx, ok := r.Context().Value(middleware.ProjectIDKey).(string)
+	if !ok || projectIDFromURL != projectIDFromCtx {
+		http.Error(w, "Akses tidak sah untuk proyek ini (X-API-Key tidak valid)", http.StatusUnauthorized)
 		return
 	}
+	projectID := projectIDFromCtx
 
 	var projectName string
 	err := db.DB.QueryRow("SELECT name FROM projects WHERE id = $1", projectID).Scan(&projectName)

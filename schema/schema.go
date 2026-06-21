@@ -18,24 +18,8 @@ func IsSafeName(name string) bool {
 	return safeNameRegex.MatchString(name) && len(name) < 64
 }
 
-func mapDataType(inputType string, dbType string) (string, error) {
+func mapDataType(inputType string) (string, error) {
 	lowerType := strings.ToLower(inputType)
-	if dbType == "sqlite" {
-		switch lowerType {
-		case "text", "string", "jsonb", "json":
-			return "TEXT", nil
-		case "integer", "int":
-			return "INTEGER", nil
-		case "boolean", "bool":
-			return "INTEGER", nil // SQLite tidak punya boolean tipe khusus, gunakan integer (0/1)
-		case "timestamp", "datetime":
-			return "DATETIME", nil
-		case "float", "double":
-			return "REAL", nil
-		default:
-			return "", fmt.Errorf("tipe data tidak didukung di SQLite: %s", inputType)
-		}
-	}
 
 	// Postgres mapping
 	switch lowerType {
@@ -99,28 +83,14 @@ func CreateTable(projectID string, tableName string) (string, error) {
 	}
 
 	physicalName := FormatPhysicalTableName(projectID, tableName)
-	var createTableDDL string
-
-	if db.DBType == "postgres" {
-		createTableDDL = fmt.Sprintf(`
-			CREATE TABLE %s (
-				id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-				project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-				created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-				updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-			);
-		`, physicalName)
-	} else {
-		// SQLite
-		createTableDDL = fmt.Sprintf(`
-			CREATE TABLE %s (
-				id TEXT PRIMARY KEY,
-				project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-				created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-				updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-			);
-		`, physicalName)
-	}
+	createTableDDL := fmt.Sprintf(`
+		CREATE TABLE %s (
+			id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+			project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+			created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+		);
+	`, physicalName)
 
 	_, err = tx.Exec(createTableDDL)
 	if err != nil {
@@ -139,7 +109,7 @@ func AddColumn(projectID string, tableID string, columnName string, columnType s
 		return "", errors.New("nama kolom tidak valid")
 	}
 
-	pgType, err := mapDataType(columnType, db.DBType)
+	pgType, err := mapDataType(columnType)
 	if err != nil {
 		return "", err
 	}
@@ -162,17 +132,7 @@ func AddColumn(projectID string, tableID string, columnName string, columnType s
 	columnID := uuid.New().String()
 	insertColumnQuery := `INSERT INTO columns (id, table_id, name, type, is_nullable) VALUES ($1, $2, $3, $4, $5)`
 	
-	// Untuk SQLite boolean disimpan sebagai integer 0/1
-	var isNullableVal interface{} = isNullable
-	if db.DBType == "sqlite" {
-		if isNullable {
-			isNullableVal = 1
-		} else {
-			isNullableVal = 0
-		}
-	}
-
-	_, err = tx.Exec(insertColumnQuery, columnID, tableID, columnName, columnType, isNullableVal)
+	_, err = tx.Exec(insertColumnQuery, columnID, tableID, columnName, columnType, isNullable)
 	if err != nil {
 		return "", fmt.Errorf("gagal menyimpan metadata kolom: %v", err)
 	}
@@ -181,11 +141,6 @@ func AddColumn(projectID string, tableID string, columnName string, columnType s
 	nullability := "NULL"
 	if !isNullable {
 		nullability = "NOT NULL"
-		// SQLite punya beberapa batasan dalam ALTER TABLE ADD COLUMN NOT NULL tanpa DEFAULT value.
-		// Namun untuk mempermudah, kita biarkan saja NULL / default value jika di SQLite.
-		if db.DBType == "sqlite" {
-			nullability = "" // Biarkan kosong agar SQLite mau memproses
-		}
 	}
 
 	alterTableDDL := fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s %s;", physicalTableName, columnName, pgType, nullability)
