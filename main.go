@@ -27,6 +27,7 @@ func main() {
 	go realtime.GlobalHub.Run()
 
 	r := chi.NewRouter()
+	r.Use(middleware.CorsMiddleware)
 	r.Use(chiMiddleware.Logger)
 	r.Use(chiMiddleware.Recoverer)
 	r.Use(middleware.SystemLoggerMiddleware) // Logger sistem GoBaaS

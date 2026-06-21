@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 
 	"gobaas/db"
 )
@@ -79,6 +80,46 @@ func AdminKeyMiddleware(next http.Handler) http.Handler {
 
 		if providedKey != adminKey {
 			http.Error(w, "X-Admin-Key tidak valid", http.StatusForbidden)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// CorsMiddleware menangani Cross-Origin Resource Sharing (CORS) agar frontend browser dapat memanggil API.
+func CorsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
+		origin := r.Header.Get("Origin")
+
+		// Tentukan origin yang diizinkan
+		if allowedOrigins == "" || allowedOrigins == "*" {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+		} else {
+			// Cek apakah origin masuk dalam daftar allowedOrigins
+			matched := false
+			for _, allowed := range strings.Split(allowedOrigins, ",") {
+				if strings.TrimSpace(allowed) == origin {
+					w.Header().Set("Access-Control-Allow-Origin", origin)
+					matched = true
+					break
+				}
+			}
+			if !matched && origin != "" {
+				// Origin tidak diizinkan, kembalikan 403 atau biarkan browser memblokirnya
+				http.Error(w, "CORS: Origin tidak diizinkan", http.StatusForbidden)
+				return
+			}
+		}
+
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-API-Key, X-Admin-Key")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+
+		// Tangani preflight request OPTIONS
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
 			return
 		}
 
