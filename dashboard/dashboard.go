@@ -12,6 +12,7 @@ import (
 	"os"
 	"strings"
 
+	"gobaas/crud"
 	"gobaas/db"
 	"gobaas/policy"
 	"gobaas/schema"
@@ -1618,6 +1619,33 @@ func handleDashboardImportJSON(w http.ResponseWriter, r *http.Request) {
 		defer tx.Rollback()
 
 		for _, input := range rowsArray {
+			// Siapkan normalizedInput untuk cek duplikat
+			normalizedInput := make(map[string]interface{})
+			for col, val := range input {
+				normalizedCol := strings.ReplaceAll(col, " ", "_")
+				matchedCol := ""
+				for validColName := range validCols {
+					if strings.EqualFold(validColName, normalizedCol) {
+						matchedCol = validColName
+						break
+					}
+				}
+				if matchedCol != "" {
+					normalizedInput[matchedCol] = val
+				}
+			}
+
+			// Panggil IsDuplicateRecord untuk validasi data duplikat
+			isDup, err := crud.IsDuplicateRecord(physicalTable, validCols, projectID, normalizedInput)
+			if err != nil {
+				http.Error(w, fmt.Sprintf("Gagal memvalidasi data duplikat saat import: %v", err), http.StatusInternalServerError)
+				return
+			}
+			if isDup {
+				// Lewati (skip) baris duplikat agar data non-duplikat lainnya tetap ter-import
+				continue
+			}
+
 			rowID := uuid.New().String()
 			columns := []string{"id", "project_id"}
 			placeholders := []string{"$1", "$2"}

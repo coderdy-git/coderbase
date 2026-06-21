@@ -311,6 +311,17 @@ func handleInsert(w http.ResponseWriter, r *http.Request) {
 		paramIndex++
 	}
 
+	// Cek validasi double data (data ganda/duplikat)
+	isDup, err := IsDuplicateRecord(physicalTable, validCols, projectID, input)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Gagal memvalidasi data duplikat: %v", err), http.StatusInternalServerError)
+		return
+	}
+	if isDup {
+		http.Error(w, "Data duplikat terdeteksi. Baris dengan nilai kolom yang sama sudah ada di tabel ini.", http.StatusBadRequest)
+		return
+	}
+
 	queryStr := fmt.Sprintf(
 		"INSERT INTO %s (%s) VALUES (%s)",
 		physicalTable,
@@ -457,4 +468,50 @@ func handleDelete(w http.ResponseWriter, r *http.Request) {
 		"message": "Data berhasil dihapus",
 		"id":      id,
 	})
+}
+
+func IsDuplicateRecord(physicalTable string, validCols map[string]bool, projectID string, input map[string]interface{}) (bool, error) {
+	// Temukan kolom-kolom kustom (bukan kolom metadata)
+	var customCols []string
+	for col := range validCols {
+		if col == "id" || col == "project_id" || col == "user_id" || col == "created_at" || col == "updated_at" {
+			continue
+		}
+		customCols = append(customCols, col)
+	}
+
+	// Jika tidak ada kolom kustom, anggap bukan duplikat
+	if len(customCols) == 0 {
+		return false, nil
+	}
+
+	queryParts := []string{"SELECT EXISTS(SELECT 1 FROM " + physicalTable + " WHERE project_id = $1"}
+	queryArgs := []interface{}{projectID}
+	paramIndex := 2
+
+	for _, col := range customCols {
+		val, exists := input[col]
+		if !exists || val == nil {
+			queryParts = append(queryParts, fmt.Sprintf("%s IS NULL", col))
+		} else {
+			queryParts = append(queryParts, fmt.Sprintf("%s = $%d", col, paramIndex))
+			switch v := val.(type) {
+			case map[string]interface{}, []interface{}:
+				jsonBytes, _ := json.Marshal(v)
+				queryArgs = append(queryArgs, string(jsonBytes))
+			default:
+				queryArgs = append(queryArgs, val)
+			}
+			paramIndex++
+		}
+	}
+
+	fullQuery := strings.Join(queryParts, " AND ") + ")"
+	
+	var isDup bool
+	err := db.DB.QueryRow(fullQuery, queryArgs...).Scan(&isDup)
+	if err != nil {
+		return false, err
+	}
+	return isDup, nil
 }
