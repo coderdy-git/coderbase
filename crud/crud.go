@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"gobaas/auth"
@@ -152,6 +153,36 @@ func handleGet(w http.ResponseWriter, r *http.Request) {
 		queryStr += fmt.Sprintf(" AND %s = $2", filterCol)
 		queryArgs = append(queryArgs, filterVal)
 	}
+
+	// Parsing limit dan offset/page
+	limitVal := 100
+	offsetVal := 0
+
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limitVal = l
+			if limitVal > 1000 {
+				limitVal = 1000 // Batasan keamanan maksimal 1000 data
+			}
+		}
+	}
+
+	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p > 1 {
+			offsetVal = (p - 1) * limitVal
+		}
+	} else if offsetStr := r.URL.Query().Get("offset"); offsetStr != "" {
+		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
+			offsetVal = o
+		}
+	}
+
+	// Tambahkan ORDER BY created_at DESC agar urutannya konsisten
+	queryStr += " ORDER BY created_at DESC"
+
+	paramIndex := len(queryArgs) + 1
+	queryStr += fmt.Sprintf(" LIMIT $%d OFFSET $%d", paramIndex, paramIndex+1)
+	queryArgs = append(queryArgs, limitVal, offsetVal)
 
 	rows, err := db.DB.Query(queryStr, queryArgs...)
 	if err != nil {
