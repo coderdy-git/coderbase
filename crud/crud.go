@@ -31,7 +31,7 @@ func RegisterCRUDRoutes(r chi.Router) {
 
 // Mengambil userID dari context secara aman
 func getUserIDFromContext(r *http.Request) string {
-	val := r.Context().Value("user_id")
+	val := r.Context().Value(auth.UserIDKey)
 	if val == nil {
 		return ""
 	}
@@ -139,18 +139,20 @@ func handleGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Evaluasi RLS Policy
-	sqlFilter, allowed, err := policy.EvaluatePolicy(projectID, tableName, "SELECT", userID)
+	filterCol, filterVal, allowed, err := policy.EvaluatePolicy(projectID, tableName, "SELECT", userID)
 	if err != nil || !allowed {
 		http.Error(w, "Akses ditolak oleh RLS Policy", http.StatusForbidden)
 		return
 	}
 
 	queryStr := fmt.Sprintf("SELECT * FROM %s WHERE project_id = $1", physicalTable)
-	if sqlFilter != "" {
-		queryStr += " AND " + sqlFilter
+	queryArgs := []interface{}{projectID}
+	if filterCol != "" {
+		queryStr += fmt.Sprintf(" AND %s = $2", filterCol)
+		queryArgs = append(queryArgs, filterVal)
 	}
 
-	rows, err := db.DB.Query(queryStr, projectID)
+	rows, err := db.DB.Query(queryStr, queryArgs...)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Gagal mengambil data: %v", err), http.StatusInternalServerError)
 		return
@@ -218,7 +220,7 @@ func handleInsert(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Evaluasi RLS Policy
-	sqlFilter, allowed, err := policy.EvaluatePolicy(projectID, tableName, "INSERT", userID)
+	filterCol, _, allowed, err := policy.EvaluatePolicy(projectID, tableName, "INSERT", userID)
 	if err != nil || !allowed {
 		http.Error(w, "Akses ditolak oleh RLS Policy", http.StatusForbidden)
 		return
@@ -237,7 +239,7 @@ func handleInsert(w http.ResponseWriter, r *http.Request) {
 	values := []interface{}{rowID, projectID}
 
 	// Jika policy RLS membatasi kepemilikan data (Owner Policy), paksa isi kolom user_id
-	if sqlFilter != "" && strings.Contains(sqlFilter, "user_id =") {
+	if filterCol == "user_id" {
 		// Pastikan kolom user_id terdaftar di tabel fisik
 		if validCols["user_id"] {
 			input["user_id"] = userID
@@ -303,7 +305,7 @@ func handleUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Evaluasi RLS Policy
-	sqlFilter, allowed, err := policy.EvaluatePolicy(projectID, tableName, "UPDATE", userID)
+	filterCol, filterVal, allowed, err := policy.EvaluatePolicy(projectID, tableName, "UPDATE", userID)
 	if err != nil || !allowed {
 		http.Error(w, "Akses ditolak oleh RLS Policy", http.StatusForbidden)
 		return
@@ -342,8 +344,9 @@ func handleUpdate(w http.ResponseWriter, r *http.Request) {
 		physicalTable,
 		strings.Join(setClauses, ", "),
 	)
-	if sqlFilter != "" {
-		queryStr += " AND " + sqlFilter
+	if filterCol != "" {
+		queryStr += fmt.Sprintf(" AND %s = $%d", filterCol, paramIndex)
+		values = append(values, filterVal)
 	}
 
 	res, err := db.DB.Exec(queryStr, values...)
@@ -380,18 +383,20 @@ func handleDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Evaluasi RLS Policy
-	sqlFilter, allowed, err := policy.EvaluatePolicy(projectID, tableName, "DELETE", userID)
+	filterCol, filterVal, allowed, err := policy.EvaluatePolicy(projectID, tableName, "DELETE", userID)
 	if err != nil || !allowed {
 		http.Error(w, "Akses ditolak oleh RLS Policy", http.StatusForbidden)
 		return
 	}
 
 	queryStr := fmt.Sprintf("DELETE FROM %s WHERE project_id = $1 AND id = $2", physicalTable)
-	if sqlFilter != "" {
-		queryStr += " AND " + sqlFilter
+	deleteArgs := []interface{}{projectID, id}
+	if filterCol != "" {
+		queryStr += fmt.Sprintf(" AND %s = $3", filterCol)
+		deleteArgs = append(deleteArgs, filterVal)
 	}
 
-	res, err := db.DB.Exec(queryStr, projectID, id)
+	res, err := db.DB.Exec(queryStr, deleteArgs...)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

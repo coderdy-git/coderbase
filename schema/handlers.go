@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"gobaas/middleware"
+
 	"github.com/go-chi/chi/v5"
 )
 
@@ -23,6 +25,7 @@ type AddColumnRequest struct {
 
 func RegisterSchemaRoutes(r chi.Router) {
 	r.Route("/api/projects", func(r chi.Router) {
+		r.Use(middleware.AdminKeyMiddleware)
 		r.Post("/", handleCreateProject)
 		r.Post("/{project_id}/tables", handleCreateTable)
 		r.Post("/{project_id}/tables/{table_id}/columns", handleAddColumn)

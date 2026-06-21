@@ -1,9 +1,12 @@
 package dashboard
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -1144,7 +1147,10 @@ func getSessionToken() string {
 	if adminPass == "" {
 		adminPass = "admin123"
 	}
-	return fmt.Sprintf("cb_sess_%x", adminPass)
+	// Gunakan HMAC-SHA256 agar password tidak bisa di-reverse dari cookie value
+	h := hmac.New(sha256.New, []byte("coderbase_session_secret_key_v1"))
+	h.Write([]byte(adminPass))
+	return fmt.Sprintf("cb_sess_%x", h.Sum(nil))
 }
 
 func DashboardAuthMiddleware(next http.Handler) http.Handler {
@@ -1661,9 +1667,11 @@ func handleDashboardLoginPost(w http.ResponseWriter, r *http.Request) {
 
 	if adminUser == "" {
 		adminUser = "admin"
+		log.Println("⚠️  PERINGATAN: ADMIN_USERNAME tidak di-set, menggunakan default 'admin'. Set env ADMIN_USERNAME di production!")
 	}
 	if adminPass == "" {
 		adminPass = "admin123"
+		log.Println("⚠️  PERINGATAN: ADMIN_PASSWORD tidak di-set, menggunakan default 'admin123'. Set env ADMIN_PASSWORD di production!")
 	}
 
 	if username != adminUser || password != adminPass {
@@ -1680,6 +1688,8 @@ func handleDashboardLoginPost(w http.ResponseWriter, r *http.Request) {
 		Value:    expectedToken,
 		Path:     "/",
 		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   86400, // 24 jam
 	})
 
 	http.Redirect(w, r, "/dashboard", http.StatusSeeOther)

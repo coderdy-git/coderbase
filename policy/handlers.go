@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"gobaas/middleware"
+
 	"github.com/go-chi/chi/v5"
 )
 
@@ -15,6 +17,7 @@ type CreatePolicyRequest struct {
 
 func RegisterPolicyRoutes(r chi.Router) {
 	r.Route("/api/projects/{project_id}/tables/{table_id}/policies", func(r chi.Router) {
+		r.Use(middleware.AdminKeyMiddleware)
 		r.Post("/", handleCreatePolicy)
 	})
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -19,9 +20,16 @@ import (
 
 var jwtSecret = []byte("gobaas_super_secret_key_change_me")
 
+// UserIDKey adalah typed context key untuk user_id — menghindari collision dengan package lain
+type AuthContextKey string
+
+const UserIDKey AuthContextKey = "user_id"
+
 func init() {
 	if secret := os.Getenv("JWT_SECRET"); secret != "" {
 		jwtSecret = []byte(secret)
+	} else {
+		log.Println("⚠️  PERINGATAN: JWT_SECRET tidak di-set! Menggunakan secret default. JANGAN gunakan di production!")
 	}
 }
 
@@ -165,13 +173,8 @@ func UserAuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Masukkan user_id ke context jika valid
-		ctx := context.WithValue(r.Context(), "user_id", claims["user_id"])
+		// Masukkan user_id ke context jika valid (menggunakan typed key)
+		ctx := context.WithValue(r.Context(), UserIDKey, claims["user_id"])
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
-}
-
-// Pembantu parsing Authorization header
-func stringsCol(s string) string {
-	return s
 }

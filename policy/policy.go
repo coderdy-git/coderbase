@@ -47,18 +47,19 @@ func CreatePolicy(tableID, action, role, expression string) (string, error) {
 	return policyID, nil
 }
 
-// EvaluatePolicy memeriksa policy untuk suatu tabel dan mengembalikan klausa SQL tambahan (filter)
+// EvaluatePolicy memeriksa policy untuk suatu tabel dan mengembalikan filter kolom + nilai.
 // Jika tidak ada policy yang mengizinkan, return error.
-// Mengembalikan: (sqlFilter string, isAllowed bool, err error)
-func EvaluatePolicy(projectID, tableName, action, userID string) (string, bool, error) {
+// Mengembalikan: (filterCol string, filterVal string, isAllowed bool, err error)
+// filterCol dan filterVal digunakan oleh caller untuk membangun parameterized query yang aman.
+func EvaluatePolicy(projectID, tableName, action, userID string) (string, string, bool, error) {
 	// Dapatkan table_id terlebih dahulu
 	var tableID string
 	err := db.DB.QueryRow("SELECT id FROM tables WHERE project_id = $1 AND name = $2", projectID, tableName).Scan(&tableID)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return "", false, fmt.Errorf("tabel '%s' tidak ditemukan", tableName)
+			return "", "", false, fmt.Errorf("tabel '%s' tidak ditemukan", tableName)
 		}
-		return "", false, err
+		return "", "", false, err
 	}
 
 	// Cek apakah ada policy yang terdaftar untuk tabel ini dan aksi ini
@@ -67,11 +68,11 @@ func EvaluatePolicy(projectID, tableName, action, userID string) (string, bool, 
 	var policyCount int
 	err = db.DB.QueryRow("SELECT COUNT(*) FROM policies WHERE table_id = $1 AND action = $2", tableID, action).Scan(&policyCount)
 	if err != nil {
-		return "", false, err
+		return "", "", false, err
 	}
 
 	if policyCount == 0 {
-		return "", true, nil // RLS tidak aktif untuk aksi ini pada tabel ini
+		return "", "", true, nil // RLS tidak aktif untuk aksi ini pada tabel ini
 	}
 
 	// Cari policy yang cocok dengan role request saat ini
@@ -87,23 +88,23 @@ func EvaluatePolicy(projectID, tableName, action, userID string) (string, bool, 
 	if err != nil {
 		if err == sql.ErrNoRows {
 			// Tidak ada policy yang cocok untuk role ini (misal request anon tetapi policy hanya ada untuk authenticated)
-			return "", false, ErrAccessDenied
+			return "", "", false, ErrAccessDenied
 		}
-		return "", false, err
+		return "", "", false, err
 	}
 
 	// Evaluasi ekspresi policy
 	if expression == "true" {
-		return "", true, nil // Diizinkan tanpa filter tambahan
+		return "", "", true, nil // Diizinkan tanpa filter tambahan
 	}
 
 	if expression == "auth.uid() = user_id" {
 		if userID == "" {
-			return "", false, ErrAccessDenied // Aksi membutuhkan user terautentikasi
+			return "", "", false, ErrAccessDenied // Aksi membutuhkan user terautentikasi
 		}
-		// Return filter sql tambahan: user_id = 'userID'
-		return fmt.Sprintf("user_id = '%s'", userID), true, nil
+		// Return kolom dan nilai secara terpisah — caller membangun parameterized query
+		return "user_id", userID, true, nil
 	}
 
-	return "", false, ErrAccessDenied
+	return "", "", false, ErrAccessDenied
 }
