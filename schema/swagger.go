@@ -205,12 +205,17 @@ func SwaggerSpecGenerator(w http.ResponseWriter, r *http.Request) {
 	}
 
 	components["schemas"] = schemas
-	// Definisikan autentikasi API Key
+	// Definisikan autentikasi API Key dan JWT Bearer
 	components["securitySchemes"] = map[string]interface{}{
-		"ApiKeyAuth": map[string]string{
+		"ApiKeyAuth": map[string]interface{}{
 			"type": "apiKey",
 			"in":   "header",
 			"name": "X-API-Key",
+		},
+		"BearerAuth": map[string]interface{}{
+			"type":         "http",
+			"scheme":       "bearer",
+			"bearerFormat": "JWT",
 		},
 	}
 
@@ -237,6 +242,7 @@ func SwaggerSpecGenerator(w http.ResponseWriter, r *http.Request) {
 		"components": components,
 		"security": []map[string]interface{}{
 			{"ApiKeyAuth": []string{}},
+			{"BearerAuth": []string{}},
 		},
 	}
 
