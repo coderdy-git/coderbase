@@ -78,7 +78,7 @@ func SwaggerSpecGenerator(w http.ResponseWriter, r *http.Request) {
 
 		for cRows.Next() {
 			var colName, colType string
-			var isNullable int
+			var isNullable bool
 			if err := cRows.Scan(&colName, &colType, &isNullable); err == nil {
 				swaggerType := "string"
 				if colType == "integer" || colType == "int" {
